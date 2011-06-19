@@ -52,6 +52,8 @@ def parse_bytecode(code):
             elif op in opcode.hasjrel:
                 # Make it absolute
                 arg = i + oparg
+            elif op in opcode.haslocal:
+                arg = code.co_varnames[oparg]
             else:
                 raise NotImplementedError
         instructions.append(Instruction(
@@ -91,7 +93,7 @@ class BasicBlockFinder(object):
 
     def handle_simple_op(self, instr):
         pass
-    handle_LOAD_CONST = handle_LOAD_GLOBAL = handle_RETURN_VALUE = handle_POP_TOP = handle_simple_op
+    handle_LOAD_CONST = handle_LOAD_FAST = handle_LOAD_GLOBAL = handle_RETURN_VALUE = handle_POP_TOP = handle_simple_op
 
     def handle_POP_JUMP_IF_FALSE(self, instr):
         instr.true_block = self.get_basic_block(instr.new_idx + 1)
@@ -139,7 +141,6 @@ class Interpreter(object):
         finally:
             self.indent_level -= 1
 
-
     def evaluate(self):
         while self.basic_blocks:
             basic_block = self.basic_blocks.pop()
@@ -151,11 +152,9 @@ class Interpreter(object):
             handler = getattr(self, "handle_%s" % instr.opname)
             handler(instr)
 
-    def handle_LOAD_CONST(self, instr):
+    def handle_literal(self, instr):
         self.buf.append(Literal(instr.arg))
-
-    def handle_LOAD_GLOBAL(self, instr):
-        self.buf.append(Literal(instr.arg))
+    handle_LOAD_CONST = handle_LOAD_FAST = handle_LOAD_GLOBAL = handle_literal
 
     def handle_RETURN_VALUE(self, instr):
         [obj] = self.get_and_clear_buf(1)
@@ -182,5 +181,8 @@ def decompile(function):
     instructions = parse_bytecode(function.__code__)
     start_bblock = BasicBlockFinder(instructions).find_basic_blocks()
     body = Interpreter(start_bblock).evaluate()
-    header = "def %s():\n" % function.__name__
+    header = "def %(name)s(%(args)s):\n" % {
+        "name": function.__name__,
+        "args": ", ".join(function.__code__.co_varnames[:function.__code__.co_argcount])
+    }
     return header + body

@@ -53,6 +53,15 @@ class TestDecompilation(object):
                 return 2
         """)
 
+    def test_simple_parameters(self):
+        def f(a):
+            return a
+
+        self.assert_decompiles(f, """
+            def f(a):
+                return a
+        """)
+
 class TestBytecodeParser(object):
     def assert_bytecode(self, func, expected):
         instructions = parse_bytecode(func.__code__)
@@ -115,5 +124,14 @@ class TestBytecodeParser(object):
             ("LOAD_GLOBAL", "y"),
             ("POP_TOP",),
             ("LOAD_CONST", 1),
+            ("RETURN_VALUE",)
+        ])
+
+    def test_parameter_name(self):
+        def f(a):
+            return a
+
+        self.assert_bytecode(f, [
+            ("LOAD_FAST", "a"),
             ("RETURN_VALUE",)
         ])
