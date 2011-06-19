@@ -53,7 +53,7 @@ class TestDecompilation(object):
                 return 2
         """)
 
-class TestBytecode(object):
+class TestBytecodeParser(object):
     def assert_bytecode(self, func, expected):
         instructions = parse_bytecode(func.__code__)
         expected = [
@@ -95,5 +95,25 @@ class TestBytecode(object):
             ("LOAD_CONST", 2),
             ("RETURN_VALUE",),
             ("LOAD_CONST", None),
+            ("RETURN_VALUE",)
+        ])
+
+    def test_jump_forward(self):
+        def f():
+            if z:
+                x
+            else:
+                y
+            return 1
+
+        self.assert_bytecode(f, [
+            ("LOAD_GLOBAL", "z"),
+            ("POP_JUMP_IF_FALSE", 5),
+            ("LOAD_GLOBAL", "x"),
+            ("POP_TOP",),
+            ("JUMP_FORWARD", 7),
+            ("LOAD_GLOBAL", "y"),
+            ("POP_TOP",),
+            ("LOAD_CONST", 1),
             ("RETURN_VALUE",)
         ])
