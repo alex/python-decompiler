@@ -31,6 +31,14 @@ class Instruction(object):
             else:
                 assert False
 
+OPCODE_WITH_CONST = frozenset(opcode.hasconst)
+OPCODE_WITH_NAME = frozenset(opcode.hasname)
+OPCODE_WITH_LOCAL = frozenset(opcode.haslocal)
+OPCODE_WITH_JREL = frozenset(opcode.hasjrel)
+OPCODE_WITH_NUM = frozenset(opcode.hasjabs) | frozenset([
+    opcode.opmap[op] for op in ["BUILD_LIST", "CALL_FUNCTION"]
+])
+
 def parse_bytecode(code):
     i = 0
     bytecodes = map(ord, code.co_code)
@@ -43,16 +51,16 @@ def parse_bytecode(code):
         if op >= opcode.HAVE_ARGUMENT:
             oparg = bytecodes[i] + (bytecodes[i + 1] << 8)
             i += 2
-            if op in opcode.hasconst:
+            if op in OPCODE_WITH_CONST:
                 arg = code.co_consts[oparg]
-            elif op in opcode.hasname:
+            elif op in OPCODE_WITH_NAME:
                 arg = code.co_names[oparg]
-            elif op in opcode.hasjabs:
+            elif op in OPCODE_WITH_NUM:
                 arg = oparg
-            elif op in opcode.hasjrel:
+            elif op in OPCODE_WITH_JREL:
                 # Make it absolute
                 arg = i + oparg
-            elif op in opcode.haslocal:
+            elif op in OPCODE_WITH_LOCAL:
                 arg = code.co_varnames[oparg]
             else:
                 raise NotImplementedError
@@ -93,7 +101,10 @@ class BasicBlockFinder(object):
 
     def handle_simple_op(self, instr):
         pass
-    handle_LOAD_CONST = handle_LOAD_FAST = handle_LOAD_GLOBAL = handle_RETURN_VALUE = handle_POP_TOP = handle_simple_op
+    handle_LOAD_CONST = handle_LOAD_FAST = handle_LOAD_ATTR = handle_LOAD_GLOBAL = \
+        handle_STORE_FAST = handle_STORE_SUBSCR = handle_BUILD_LIST = \
+        handle_CALL_FUNCTION = \
+        handle_RETURN_VALUE = handle_POP_TOP = handle_simple_op
 
     def handle_POP_JUMP_IF_FALSE(self, instr):
         instr.true_block = self.get_basic_block(instr.new_idx + 1)
@@ -102,13 +113,6 @@ class BasicBlockFinder(object):
     def handle_JUMP_FORWARD(self, instr):
         instr.fallthrough = self.get_basic_block(instr.arg)
 
-
-class Literal(object):
-    def __init__(self, obj):
-        self.obj = obj
-
-    def build(self):
-        return str(self.obj)
 
 class AddBasicBlock(Exception):
     def __init__(self, block):
@@ -153,20 +157,41 @@ class Interpreter(object):
             handler(instr)
 
     def handle_literal(self, instr):
-        self.buf.append(Literal(instr.arg))
+        self.buf.append(str(instr.arg))
     handle_LOAD_CONST = handle_LOAD_FAST = handle_LOAD_GLOBAL = handle_literal
+
+    def handle_LOAD_ATTR(self, instr):
+        [obj] = self.get_and_clear_buf(1)
+        self.buf.append("%s.%s" % (obj, instr.arg))
+
+    def handle_BUILD_LIST(self, instr):
+        self.buf.append("[]")
+
+    def handle_STORE_FAST(self, instr):
+        [obj] = self.get_and_clear_buf(1)
+        self.emit("%s = %s" % (instr.arg, obj))
+
+    def handle_STORE_SUBSCR(self, instr):
+        value, obj, idx = self.get_and_clear_buf(3)
+        self.emit("%s[%s] = %s" % (obj, idx, value))
+
+    def handle_CALL_FUNCTION(self, instr):
+        args = self.get_and_clear_buf(instr.arg + 1)
+        func = args[0]
+        args = args[1:]
+        self.buf.append("%s(%s)" % (func, ", ".join(args)))
 
     def handle_RETURN_VALUE(self, instr):
         [obj] = self.get_and_clear_buf(1)
-        self.emit("return %s" % obj.build())
+        self.emit("return %s" % obj)
 
     def handle_POP_TOP(self, instr):
         [obj] = self.get_and_clear_buf(1)
-        self.emit(obj.build())
+        self.emit(obj)
 
     def handle_POP_JUMP_IF_FALSE(self, instr):
         [obj] = self.get_and_clear_buf(1)
-        self.emit("if %s:" % obj.build())
+        self.emit("if %s:" % obj)
         with self.indent():
             self.handle_basic_block(instr.true_block)
         self.emit("else:")

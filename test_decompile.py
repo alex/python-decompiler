@@ -62,6 +62,20 @@ class TestDecompilation(object):
                 return a
         """)
 
+    def test_list_ops(self):
+        def f():
+            x = []
+            x.append(1)
+            x[0] = 3
+
+        self.assert_decompiles(f, """
+            def f():
+                x = []
+                x.append(1)
+                x[0] = 3
+                return None
+        """)
+
 class TestBytecodeParser(object):
     def assert_bytecode(self, func, expected):
         instructions = parse_bytecode(func.__code__)
