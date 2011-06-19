@@ -36,6 +36,23 @@ class TestDecompilation(object):
                     return None
         """)
 
+    def test_more_branchy_stuff(self):
+        def f():
+            if z:
+                x
+            else:
+                y
+            return 2
+
+        self.assert_decompiles(f, """
+            def f():
+                if z:
+                    x
+                else:
+                    y
+                return 2
+        """)
+
 class TestBytecode(object):
     def assert_bytecode(self, func, expected):
         instructions = parse_bytecode(func.__code__)
