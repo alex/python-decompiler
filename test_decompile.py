@@ -76,6 +76,19 @@ class TestDecompilation(object):
                 return None
         """)
 
+    def test_simple_for_loop(self):
+        def f(x):
+            for i in x:
+                pass
+
+        # TODO: continue should become pass where possible
+        self.assert_decompiles(f, """
+            def f(x):
+                for i in x:
+                    continue
+                return None
+        """)
+
 class TestBytecodeParser(object):
     def assert_bytecode(self, func, expected):
         instructions = parse_bytecode(func.__code__)

@@ -6,10 +6,13 @@ NO_ARG = object()
 class Instruction(object):
     def __init__(self, op, arg=NO_ARG, real_idx=None, new_idx=None):
         self.op = op
-        self.opname = opcode.opname[op]
         self.arg = arg
         self.real_idx = real_idx
         self.new_idx = new_idx
+
+    @property
+    def opname(self):
+        return opcode.opname[self.op]
 
     def __repr__(self):
         r = self.opname
@@ -104,6 +107,10 @@ class BasicBlockFinder(object):
     handle_LOAD_CONST = handle_LOAD_FAST = handle_LOAD_ATTR = handle_LOAD_GLOBAL = \
         handle_STORE_FAST = handle_STORE_SUBSCR = handle_BUILD_LIST = \
         handle_CALL_FUNCTION = \
+        handle_SETUP_LOOP = \
+        handle_JUMP_ABSOLUTE = \
+        handle_POP_BLOCK = \
+        handle_NOP = \
         handle_RETURN_VALUE = handle_POP_TOP = handle_simple_op
 
     def handle_POP_JUMP_IF_FALSE(self, instr):
@@ -111,6 +118,15 @@ class BasicBlockFinder(object):
         instr.false_block = self.get_basic_block(instr.arg)
 
     def handle_JUMP_FORWARD(self, instr):
+        instr.fallthrough = self.get_basic_block(instr.arg)
+
+    def handle_GET_ITER(self, instr):
+        # TODO: broken, in oh so many ways
+        instr.loop_var = self.instructions[instr.new_idx + 2].arg
+        self.instructions[instr.new_idx + 2].op = opcode.opmap["NOP"]
+        instr.loop = self.get_basic_block(instr.new_idx + 1)
+
+    def handle_FOR_ITER(self, instr):
         instr.fallthrough = self.get_basic_block(instr.arg)
 
 
@@ -156,6 +172,10 @@ class Interpreter(object):
             handler = getattr(self, "handle_%s" % instr.opname)
             handler(instr)
 
+    def handle_NOP(self, instr):
+        pass
+    handle_SETUP_LOOP = handle_POP_BLOCK = handle_NOP
+
     def handle_literal(self, instr):
         self.buf.append(str(instr.arg))
     handle_LOAD_CONST = handle_LOAD_FAST = handle_LOAD_GLOBAL = handle_literal
@@ -174,6 +194,15 @@ class Interpreter(object):
     def handle_STORE_SUBSCR(self, instr):
         value, obj, idx = self.get_and_clear_buf(3)
         self.emit("%s[%s] = %s" % (obj, idx, value))
+
+    def handle_GET_ITER(self, instr):
+        [obj] = self.get_and_clear_buf(1)
+        self.emit("for %s in %s:" % (instr.loop_var, obj))
+        with self.indent():
+            self.handle_basic_block(instr.loop)
+
+    def handle_FOR_ITER(self, instr):
+        self.basic_blocks.append(instr.fallthrough)
 
     def handle_CALL_FUNCTION(self, instr):
         args = self.get_and_clear_buf(instr.arg + 1)
@@ -200,6 +229,9 @@ class Interpreter(object):
 
     def handle_JUMP_FORWARD(self, instr):
         self.basic_blocks.append(instr.fallthrough)
+
+    def handle_JUMP_ABSOLUTE(self, instr):
+        self.emit("continue")
 
 
 def decompile(function):
