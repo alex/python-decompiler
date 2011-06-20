@@ -1,9 +1,10 @@
 Python Decompiler
 =================
 
-This project aims to create a comprehensive decompiler for Python bytecode.
-At the moment it is relatively incomplete, with many things not supported,
-including, but certainly not limited to:
+This project aims to create a comprehensive decompiler for CPython bytecode
+(likely works with PyPy as well, and any other Python implementation that uses
+CPython's bytecode). At the moment it is relatively incomplete, with many
+things not supported, including, but certainly not limited to:
 
  * Unpacking
  * try/except/finally
